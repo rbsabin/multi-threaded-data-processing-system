@@ -1,6 +1,5 @@
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 public class SharedTaskQueue {
 
@@ -10,16 +9,19 @@ public class SharedTaskQueue {
         this.queue = new LinkedBlockingQueue<>();
     }
 
-    public void addTask(Task task) {
-        if (task == null) {
-            throw new IllegalArgumentException("Task cannot be null.");
-        }
+    public SharedTaskQueue(int capacity) {
+        this.queue = new LinkedBlockingQueue<>(capacity);
+    }
 
-        queue.add(task);
+    public void addTask(Task task) throws InterruptedException {
+        if (task == null) {
+            throw new IllegalArgumentException("Task cannot be null");
+        }
+        queue.put(task);
     }
 
     public Task getTask() throws InterruptedException {
-        return queue.poll(500, TimeUnit.MILLISECONDS);
+        return queue.take();
     }
 
     public int size() {

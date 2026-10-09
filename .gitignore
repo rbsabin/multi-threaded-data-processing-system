@@ -1,10 +1,37 @@
-# Java compiled files
+# Java compiled files & logs
 *.class
+*.jar
+*.war
+*.ear
+*.log
 
-# IDE files
+# Go binaries & test artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# IDE & Editor files
 .idea/
 .vscode/
 *.iml
+*.iws
+*.ipr
+*.swp
+*.swo
+*~
 
-# macOS
+# macOS & OS artifacts
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Root-level generated results (keep java/results.txt and go/results.txt tracked)
+/results.txt

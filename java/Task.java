@@ -1,26 +1,24 @@
 public class Task {
 
+    public static final Task POISON_PILL = new Task(-1, "SHUTDOWN");
+
     private final int taskId;
     private final String data;
-    private final boolean poisonPill;
 
     public Task(int taskId, String data) {
         this.taskId = taskId;
         this.data = data;
-        this.poisonPill = false;
-    }
-
-    private Task(boolean poisonPill) {
-        this.taskId = -1;
-        this.data = "";
-        this.poisonPill = poisonPill;
     }
 
     public static Task createPoisonPill() {
-        return new Task(true);
+        return POISON_PILL;
     }
 
     public int getTaskId() {
+        return taskId;
+    }
+
+    public int getId() {
         return taskId;
     }
 
@@ -29,7 +27,7 @@ public class Task {
     }
 
     public boolean isPoisonPill() {
-        return poisonPill;
+        return this == POISON_PILL || taskId == -1;
     }
 
     @Override

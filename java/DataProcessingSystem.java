@@ -10,166 +10,99 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class DataProcessingSystem {
 
-        private static final Logger LOGGER = Logger.getLogger(DataProcessingSystem.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(DataProcessingSystem.class.getName());
 
-        private static final int NUMBER_OF_WORKERS = 3;
-        private static final int NUMBER_OF_TASKS = 12;
+    private static final int NUMBER_OF_WORKERS = 3;
+    private static final int NUMBER_OF_TASKS = 12;
+    private static final String RESULTS_FILE = "results.txt";
 
-        private static final String RESULTS_FILE = "results.txt";
+    public static void main(String[] args) {
+        LOGGER.info("Starting Data Processing System.");
 
-        public static void main(String[] args) {
+        SharedTaskQueue taskQueue = new SharedTaskQueue();
+        List<String> results = Collections.synchronizedList(new ArrayList<>());
+        ExecutorService executor = Executors.newFixedThreadPool(NUMBER_OF_WORKERS);
 
-                LOGGER.info("Starting Data Processing System.");
+        try {
+            for (int workerId = 1; workerId <= NUMBER_OF_WORKERS; workerId++) {
+                executor.submit(new Worker(workerId, taskQueue, results));
+            }
 
-                SharedTaskQueue taskQueue = new SharedTaskQueue();
+            for (int taskId = 1; taskId <= NUMBER_OF_TASKS; taskId++) {
+                Task task = new Task(taskId, "Data-" + taskId);
+                taskQueue.addTask(task);
+                LOGGER.info("Added " + task + " to shared queue.");
+            }
 
-                List<String> results = Collections.synchronizedList(new ArrayList<>());
+            // Enqueue poison pills to signal workers to terminate
+            for (int i = 0; i < NUMBER_OF_WORKERS; i++) {
+                taskQueue.addTask(Task.createPoisonPill());
+            }
 
-                ExecutorService executor = Executors.newFixedThreadPool(NUMBER_OF_WORKERS);
+            executor.shutdown();
+            if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
+                LOGGER.warning("Workers did not finish within timeout; forcing shutdown.");
+                executor.shutdownNow();
+            }
 
-                try {
-
-                        // Create and submit worker threads.
-                        for (int workerId = 1; workerId <= NUMBER_OF_WORKERS; workerId++) {
-
-                                executor.submit(
-                                                new Worker(
-                                                                workerId,
-                                                                taskQueue,
-                                                                results));
-                        }
-
-                        // Dynamically create tasks.
-                        for (int taskId = 1; taskId <= NUMBER_OF_TASKS; taskId++) {
-
-                                Task task = new Task(
-                                                taskId,
-                                                "Data-" + taskId);
-
-                                taskQueue.addTask(task);
-
-                                LOGGER.info(
-                                                "Added " + task + " to shared queue.");
-                        }
-
-                        /*
-                         * Add one shutdown signal for each worker.
-                         * Workers will stop after all previously queued
-                         * tasks have been processed.
-                         */
-                        for (int i = 0; i < NUMBER_OF_WORKERS; i++) {
-
-                                taskQueue.addTask(
-                                                Task.createPoisonPill());
-                        }
-
-                        LOGGER.info(
-                                        "All tasks and shutdown signals have "
-                                                        + "been added to the queue.");
-
-                        /*
-                         * No more tasks will be submitted, so the executor
-                         * can begin its normal shutdown process.
-                         */
-                        executor.shutdown();
-
-                        boolean completed = executor.awaitTermination(
-                                        30,
-                                        TimeUnit.SECONDS);
-
-                        if (!completed) {
-
-                                LOGGER.warning(
-                                                "Workers did not finish within "
-                                                                + "the expected time.");
-
-                                executor.shutdownNow();
-                        }
-
-                } catch (InterruptedException e) {
-
-                        LOGGER.warning(
-                                        "Main thread was interrupted while "
-                                                        + "waiting for workers.");
-
-                        executor.shutdownNow();
-
-                        Thread.currentThread().interrupt();
-
-                } finally {
-
-                        if (!executor.isTerminated()) {
-                                executor.shutdownNow();
-                        }
-                }
-
-                // Write all results after workers have completed.
-                writeResults(results);
-
-                // Validate the expected number of results.
-                validateResults(results);
-
-                LOGGER.info(
-                                "Data Processing System completed successfully.");
+        } catch (InterruptedException e) {
+            LOGGER.log(Level.WARNING, "Execution interrupted", e);
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        } finally {
+            if (!executor.isTerminated()) {
+                executor.shutdownNow();
+            }
         }
 
-        private static void writeResults(List<String> results) {
+        boolean writeSuccess = writeResults(results);
+        boolean validateSuccess = validateResults(results);
 
-                Path outputPath = Paths.get(RESULTS_FILE);
+        if (writeSuccess && validateSuccess) {
+            LOGGER.info("Data Processing System completed successfully.");
+        } else {
+            LOGGER.warning("Data Processing System finished with errors or validation warnings.");
+        }
+    }
 
-                try (BufferedWriter writer = Files.newBufferedWriter(
-                                outputPath,
-                                StandardOpenOption.CREATE,
-                                StandardOpenOption.TRUNCATE_EXISTING,
-                                StandardOpenOption.WRITE)) {
+    private static boolean writeResults(List<String> results) {
+        Path outputPath = Paths.get(RESULTS_FILE);
 
-                        writer.write("Data Processing Results");
-                        writer.newLine();
-                        writer.write("=======================");
-                        writer.newLine();
-                        writer.newLine();
+        try (BufferedWriter writer = Files.newBufferedWriter(
+                outputPath,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE)) {
 
-                        synchronized (results) {
+            writer.write("Data Processing Results\n");
+            writer.write("=======================\n\n");
 
-                                for (String result : results) {
-                                        writer.write(result);
-                                        writer.newLine();
-                                }
-                        }
+            for (String result : results) {
+                writer.write(result);
+                writer.newLine();
+            }
 
-                        LOGGER.info(
-                                        "Results successfully saved to "
-                                                        + outputPath.toAbsolutePath());
+            LOGGER.info("Results successfully saved to " + outputPath.toAbsolutePath());
+            return true;
 
-                } catch (IOException e) {
+        } catch (IOException e) {
+            LOGGER.log(Level.SEVERE, "Unable to write results file to " + outputPath, e);
+            return false;
+        }
+    }
 
-                        LOGGER.severe(
-                                        "Unable to write results file: "
-                                                        + e.getMessage());
-                }
+    private static boolean validateResults(List<String> results) {
+        if (results.size() != NUMBER_OF_TASKS) {
+            LOGGER.warning("Validation mismatch: expected " + NUMBER_OF_TASKS + " results, got " + results.size());
+            return false;
         }
 
-        private static void validateResults(
-                        List<String> results) {
-
-                if (results.size() != NUMBER_OF_TASKS) {
-
-                        LOGGER.warning(
-                                        "Validation warning: expected "
-                                                        + NUMBER_OF_TASKS
-                                                        + " results but received "
-                                                        + results.size());
-
-                } else {
-
-                        LOGGER.info(
-                                        "Validation successful: all "
-                                                        + NUMBER_OF_TASKS
-                                                        + " tasks produced results.");
-                }
-        }
+        LOGGER.info("Validation successful: all " + NUMBER_OF_TASKS + " tasks produced results.");
+        return true;
+    }
 }
